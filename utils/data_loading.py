@@ -2,7 +2,7 @@ import logging
 from os import listdir
 from os.path import splitext
 from pathlib import Path
-
+import cv2
 import numpy as np
 import torch
 from PIL import Image
@@ -26,22 +26,27 @@ class BasicDataset(Dataset):
         return len(self.ids)
 
     @classmethod
-    def preprocess(cls, pil_img, scale, is_mask):
-        w, h = pil_img.size
-        newW, newH = int(scale * w), int(scale * h)
-        assert newW > 0 and newH > 0, 'Scale is too small, resized images would have no pixel'
-        pil_img = pil_img.resize((newW, newH), resample=Image.NEAREST if is_mask else Image.BICUBIC)
-        img_ndarray = np.asarray(pil_img)
+    def preprocess(cls, cv2_img, scale, is_mask):
+        if is_mask:
+            cv2_img = cv2_img[:,:,0]
 
-        if img_ndarray.ndim == 2 and not is_mask:
-            img_ndarray = img_ndarray[np.newaxis, ...]
-        elif not is_mask:
-            img_ndarray = img_ndarray.transpose((2, 0, 1))
+        if not is_mask: 
+            cv2_img = cv2_img.transpose((2, 0, 1))
+            cv2_img = cv2_img / 255
+        return cv2_img
+        # img_ndarray = np.asarray(pil_img)
+        # print(img_ndarray.ndim)
+        # if img_ndarray.ndim == 2 and not is_mask:
+        #     img_ndarray = img_ndarray[np.newaxis, ...]
+        # elif not is_mask:
+        #     img_ndarray = img_ndarray.transpose((2, 0, 1))
 
-        if not is_mask:
-            img_ndarray = img_ndarray / 255
+        # if not is_mask:
+        #     img_ndarray = img_ndarray / 255
+        # print(img_ndarray.ndim)
+        # return img_ndarray
 
-        return img_ndarray
+
 
     @classmethod
     def load(cls, filename):
@@ -51,7 +56,8 @@ class BasicDataset(Dataset):
         elif ext in ['.pt', '.pth']:
             return Image.fromarray(torch.load(filename).numpy())
         else:
-            return Image.open(filename)
+            return cv2.imread(str(filename))
+            # return Image.open(filename)
 
     def __getitem__(self, idx):
         name = self.ids[idx]
@@ -60,6 +66,7 @@ class BasicDataset(Dataset):
 
         assert len(mask_file) == 1, f'Either no mask or multiple masks found for the ID {name}: {mask_file}'
         assert len(img_file) == 1, f'Either no image or multiple images found for the ID {name}: {img_file}'
+        print(mask_file[0])
         mask = self.load(mask_file[0])
         img = self.load(img_file[0])
 
@@ -77,4 +84,4 @@ class BasicDataset(Dataset):
 
 class CarvanaDataset(BasicDataset):
     def __init__(self, images_dir, masks_dir, scale=1):
-        super().__init__(images_dir, masks_dir, scale, mask_suffix='_mask')
+        super().__init__(images_dir, masks_dir, scale, mask_suffix='')
